@@ -1,0 +1,1 @@
+FROM registry.corp.kuaishou.com/kml-supercomputing-project/szp_flash2.0_verl:szp_flash2.0_verl-v1-up0-fj-ifeval-2.1

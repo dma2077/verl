@@ -77,131 +77,68 @@ def upload_model_to_huggingface(hf_path):
     api.create_repo(repo_id=args.hf_upload_path, private=False, exist_ok=True)
     api.upload_folder(folder_path=hf_path, repo_id=args.hf_upload_path, repo_type="model")
 
-
 def convert_fsdp_checkpoints_to_hfmodels():
-    local_dir = args.local_dir
+    # 1. 自动检测所有 .pt shards，通过文件名中的 rank_<num>.pt 推断分片数量
+    files = os.listdir(args.local_dir)
+    pat = re.compile(r".*rank_(\d+)\.pt$")
+    rank_ids = sorted({int(pat.match(fn).group(1)) for fn in files if pat.match(fn)})
+    if not rank_ids:
+        raise RuntimeError(f"No checkpoint shards matching 'rank_<num>.pt' in {args.local_dir}")
+    total_shards = len(rank_ids)
 
-    # copy rank zero to find the shape of (dp, fsdp)
-    rank = 0
-    world_size = 0
-    for filename in os.listdir(local_dir):
-        match = re.match(r"model_world_size_(\d+)_rank_0\.pt", filename)
-        if match:
-            world_size = match.group(1)
-            break
-    assert world_size, "No model file with the proper format"
+    # 2. load all shards
+    sds: List[Dict] = []
+    for r in rank_ids:
+        candidates = [fn for fn in files if re.search(f"rank_{r}\.pt$", fn)]
+        if not candidates:
+            raise RuntimeError(f"Cannot find shard for rank {r}")
+        path = os.path.join(args.local_dir, candidates[0])
+        sd = torch.load(path, map_location="cpu", weights_only=False)
+        sds.append(sd)
 
-    state_dict = torch.load(
-        os.path.join(local_dir, f"model_world_size_{world_size}_rank_{rank}.pt"), map_location="cpu", weights_only=False
-    )
-    pivot_key = sorted(list(state_dict.keys()))[0]
-    weight = state_dict[pivot_key]
-
-    if isinstance(weight, DTensor):
-        # get sharding info
-        device_mesh = weight.device_mesh
-        mesh = device_mesh.mesh
-        mesh_dim_names = device_mesh.mesh_dim_names
-    else:
-        # for non-DTensor
-        mesh = np.array([int(world_size)], dtype=np.int64)
-        mesh_dim_names = ("fsdp",)
-
-    print(f"Got device mesh {mesh}, mesh_dim_names {mesh_dim_names}")
-
-    assert mesh_dim_names in (("fsdp",), ("ddp", "fsdp")), f"Unsupported mesh_dim_names {mesh_dim_names}"
-
-    if "tp" in mesh_dim_names:
-        # fsdp * tp
-        total_shards = mesh.shape[-1] * mesh.shape[-2]
-        mesh_shape = (mesh.shape[-2], mesh.shape[-1])
-    else:
-        # fsdp
-        total_shards = mesh.shape[-1]
-        mesh_shape = (mesh.shape[-1],)
-
-    print(f"Processing model shards with {total_shards} {mesh_shape} in total")
-
-    model_state_dict_lst = []
-    model_state_dict_lst.append(state_dict)
-    model_state_dict_lst.extend([""] * (total_shards - 1))
-
-    def process_one_shard(rank, model_state_dict_lst):
-        model_path = os.path.join(local_dir, f"model_world_size_{world_size}_rank_{rank}.pt")
-        state_dict = torch.load(model_path, map_location="cpu", weights_only=False)
-        model_state_dict_lst[rank] = state_dict
-        return state_dict
-
-    with ThreadPoolExecutor(max_workers=min(32, os.cpu_count())) as executor:
-        for rank in range(1, total_shards):
-            executor.submit(process_one_shard, rank, model_state_dict_lst)
-    state_dict = {}
-    param_placements: Dict[str, List[Placement]] = {}
-    keys = set(model_state_dict_lst[0].keys())
-    for key in keys:
-        state_dict[key] = []
-        for model_state_dict in model_state_dict_lst:
-            try:
-                tensor = model_state_dict.pop(key)
-            except:
-                print("-" * 30)
-                print(model_state_dict)
-            if isinstance(tensor, DTensor):
-                state_dict[key].append(tensor._local_tensor.bfloat16())
-                placements = tuple(tensor.placements)
-                # replicated placement at dp dimension can be discarded
-                if mesh_dim_names[0] == "dp" or mesh_dim_names[0] == "ddp":
-                    placements = placements[1:]
-                if key not in param_placements:
-                    param_placements[key] = placements
-                else:
-                    assert param_placements[key] == placements
+    # 3. merge into one state_dict
+    merged: Dict[str, torch.Tensor] = {}
+    placements: Dict[str, Tuple[Shard, ...]] = {}
+    for key in list(sds[0].keys()):
+        parts: List[torch.Tensor] = []
+        for sd in sds:
+            t = sd.pop(key)
+            if isinstance(t, DTensor):
+                parts.append(t._local_tensor)
+                plc = tuple(t.placements)
+                # drop data-parallel placement if multiple
+                if len(plc) > 1:
+                    plc = plc[1:]
+                placements[key] = plc
             else:
-                state_dict[key].append(tensor.bfloat16())
-
-    del model_state_dict_lst
-
-    for key in sorted(state_dict):
-        if not isinstance(state_dict[key], list):
-            print(f"No need to merge key {key}")
-            continue
-        if key in param_placements:
-            # merge shards
-            placements: Tuple[Shard] = param_placements[key]
-            if len(mesh_shape) == 1:
-                # 1-D list, FSDP without TP
-                assert len(placements) == 1
-                shards = state_dict[key]
-                state_dict[key] = merge_by_placement(shards, placements[0])
-            else:
-                # 2-D list, FSDP + TP
-                raise NotImplementedError("FSDP + TP is not supported yet")
+                parts.append(t)
+        if key in placements:
+            plc = placements[key]
+            assert len(plc) == 1, "Only single-dim FSDP supported"
+            merged[key] = merge_by_placement(parts, plc[0])
         else:
-            state_dict[key] = torch.cat(state_dict[key], dim=0)
+            merged[key] = torch.cat(parts, dim=0)
 
-    print("Writing to local disk")
-    hf_path = os.path.join(local_dir, "huggingface") if args.target_dir is None else args.target_dir
-    config = AutoConfig.from_pretrained(args.hf_model_path)
+    # 4. load index.json for mapping
+    idx_path = os.path.join(args.hf_model_path, "model.safetensors.index.json")
+    with open(idx_path, 'r') as f:
+        idx = json.load(f)
+    weight_map = idx.get("weight_map", {})
 
-    if "ForTokenClassification" in config.architectures[0]:
-        auto_model = AutoModelForTokenClassification
-    elif "ForCausalLM" in config.architectures[0]:
-        auto_model = AutoModelForCausalLM
-    elif "ForConditionalGeneration" in config.architectures[0]:
-        auto_model = AutoModelForVision2Seq
-    else:
-        raise NotImplementedError(f"Unknown architecture {config['architectures']}")
+    # 5. group params by shard and save
+    from collections import defaultdict
+    shard_to_params = defaultdict(list)
+    for pname, shard_file in weight_map.items():
+        shard_to_params[shard_file].append(pname)
+    for shard_file, params in shard_to_params.items():
+        tensors = {p: merged[p] for p in params}
+        save_file(tensors, os.path.join(args.target_dir, shard_file))
+        print(f"Saved shard {shard_file}")
 
-    with torch.device("meta"):
-        model = auto_model.from_config(config, torch_dtype=torch.bfloat16)
-    model.to_empty(device="cpu")
-
-    print(f"Saving model to {hf_path}")
-    model.save_pretrained(hf_path, state_dict=state_dict)
-    del state_dict
-    del model
-    if args.hf_upload_path:
-        upload_model_to_huggingface(hf_path)
+    # 6. copy index.json to target
+    import shutil
+    shutil.copy(idx_path, os.path.join(args.target_dir, 'model.safetensors.index.json'))
+    print("FSDP → safetensors conversion done.")
 
 
 def get_tp_pp_rank_from_sharded_dir(sharded_dir):

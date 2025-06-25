@@ -15,7 +15,7 @@ clip_ratio_low=0.2
 clip_ratio_high=0.28
 
 max_prompt_length=$((1024 * 2))
-max_response_length=$((1024 * 2))
+max_response_length=$((64 * 2))
 enable_overlong_buffer=True
 overlong_buffer_len=512
 overlong_penalty_factor=1.0
@@ -25,23 +25,19 @@ loss_agg_mode="token-mean"
 enable_filter_groups=True
 filter_groups_metric=acc
 max_num_gen_batches=10
-train_prompt_bsz=128
-gen_prompt_bsz=$((train_prompt_bsz * 3))
-train_prompt_mini_bsz=32
+train_prompt_bsz=16
+gen_prompt_bsz=$((train_prompt_bsz * 2))
+train_prompt_mini_bsz=8
 n_resp_per_prompt=8
 
-# Ray
-RAY_ADDRESS=${RAY_ADDRESS:-"http://localhost:8265"}
-WORKING_DIR=${WORKING_DIR:-"${PWD}"}
-RUNTIME_ENV=${RUNTIME_ENV:-"${WORKING_DIR}/verl/trainer/runtime_env.yaml"}
-NNODES=${NNODES:-1}
 # Paths
+NNODES=1
 RAY_DATA_HOME=${RAY_DATA_HOME:-"/llm_reco/dehua/code/verl"}
-MODEL_PATH=${MODEL_PATH:-"/llm_reco/dehua/model/Qwen2.5-7B-Instruct"}
-CKPTS_DIR=${CKPTS_DIR:-"${RAY_DATA_HOME}/ckpts/${project_name}/${exp_name}"}
-TRAIN_FILE=${TRAIN_FILE:-"${RAY_DATA_HOME}/data/dapo-math-17k.parquet"}
-TEST_FILE=${TEST_FILE:-"${RAY_DATA_HOME}/data/aime-2024.parquet"}
-
+MODEL_PATH=${MODEL_PATH:-"/mmu_mllm_hdd_2/madehua/model/CKPT/food_model/Qwen2.5-VL-all_cold_sft_nosample"}
+CKPTS_DIR=${CKPTS_DIR:-"/mmu_mllm_hdd_2/madehua/model/verl/ckpts/${project_name}/${exp_name}"}
+TRAIN_FILE=${TRAIN_FILE:-"/llm_reco/dehua/data/food101/train.parquet"}
+TEST_FILE=${TEST_FILE:-"/llm_reco/dehua/data/sample_1000/food101/test.parquet"}
+export http_proxy=http://oversea-squid1.jp.txyun:11080 https_proxy=http://oversea-squid1.jp.txyun:11080 no_proxy=localhost,127.0.0.1,localaddress,localdomain.com,internal,corp.kuaishou.com,test.gifshow.com,staging.kuaishou.com
 # Algorithm
 temperature=1.0
 top_p=1.0
@@ -52,6 +48,7 @@ use_dynamic_bsz=True
 infer_micro_batch_size=null
 train_micro_batch_size=null
 offload=False
+export VLLM_ATTENTION_BACKEND=XFORMERS
 wandb login f3b76ea66a38b2a211dc706fa95b02c761994b73
 python3 -m recipe.dapo.src.main_dapo \
     data.train_files="${TRAIN_FILE}" \
@@ -97,9 +94,9 @@ python3 -m recipe.dapo.src.main_dapo \
     actor_rollout_ref.actor.grad_clip=1.0 \
     actor_rollout_ref.actor.loss_agg_mode=${loss_agg_mode} \
     actor_rollout_ref.actor.ulysses_sequence_parallel_size=1 \
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.85 \
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
     actor_rollout_ref.rollout.log_prob_micro_batch_size=${infer_micro_batch_size} \
-    actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
+    actor_rollout_ref.rollout.tensor_model_parallel_size=2 \
     actor_rollout_ref.rollout.enable_chunked_prefill=True \
     actor_rollout_ref.rollout.max_num_batched_tokens=$((max_prompt_length + max_response_length)) \
     actor_rollout_ref.rollout.temperature=${temperature} \
@@ -124,8 +121,8 @@ python3 -m recipe.dapo.src.main_dapo \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes="${NNODES}" \
     trainer.val_before_train=True \
-    trainer.test_freq=2 \
-    trainer.save_freq=2 \
-    trainer.total_epochs=1 \
+    trainer.test_freq=10 \
+    trainer.save_freq=10 \
+    trainer.total_epochs=5 \
     trainer.default_local_dir="${CKPTS_DIR}" \
     trainer.resume_mode=disable

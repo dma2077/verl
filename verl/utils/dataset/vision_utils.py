@@ -18,6 +18,7 @@ from typing import Optional, Union
 import torch
 from PIL import Image
 from qwen_vl_utils import fetch_image, fetch_video
+import io
 
 
 def process_image(image: Union[dict, Image.Image]) -> Image.Image:
@@ -27,7 +28,8 @@ def process_image(image: Union[dict, Image.Image]) -> Image.Image:
     if "bytes" in image:
         assert "image" not in image, "Cannot have both `bytes` and `image`"
         image["image"] = BytesIO(image["bytes"])
-
+    if isinstance(image["image"], io.BytesIO):
+        return Image.open(image["image"]).convert("RGB")
     return fetch_image(image)
 
 
