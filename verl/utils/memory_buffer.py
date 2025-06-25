@@ -20,6 +20,8 @@ from typing import Dict, List, Optional
 import torch
 from torch import nn
 
+from verl.utils.device import get_device_name
+
 
 class MemoryBuffer:
     """
@@ -34,7 +36,7 @@ class MemoryBuffer:
         if source is not None:
             self.data = source
         else:
-            self.data = torch.zeros(self.numel_padded, dtype=self.dtype, device="cuda", requires_grad=False)
+            self.data = torch.zeros(self.numel_padded, dtype=self.dtype, device=get_device_name(), requires_grad=False)
 
     def zero(self):
         """Reset the buffer to zero."""
@@ -96,9 +98,7 @@ def build_memory_buffer(weight_buffer_meta: Dict[str, Dict]) -> Dict[torch.dtype
     return memory_buffers
 
 
-def build_memory_reference_from_module(
-    module: torch.nn.Module, memory_buffers: Dict[torch.dtype, MemoryBuffer], maintain_weight=True
-):
+def build_memory_reference_from_module(module: torch.nn.Module, memory_buffers: Dict[torch.dtype, MemoryBuffer], maintain_weight=True):
     start_index = {}
     for dtype in memory_buffers:
         start_index[dtype] = 0
@@ -106,7 +106,7 @@ def build_memory_reference_from_module(
         memory_buffer = memory_buffers[param.dtype]
         buffer = memory_buffer.get(shape=param.shape, start_index=start_index[param.dtype])
         # need to increment start_index
-        start_index[param.dtype] += calc_padded_numel(param.shape, dtype)
+        start_index[param.dtype] += calc_padded_numel(param.shape, param.dtype)
         if maintain_weight:
             buffer.copy_(param.data)
         param.data = buffer
