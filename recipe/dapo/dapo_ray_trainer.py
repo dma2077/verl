@@ -186,7 +186,6 @@ class RayDAPOTrainer(RayPPOTrainer):
                             new_batch.non_tensor_batch["seq_final_reward"] = new_batch.batch["token_level_rewards"].sum(dim=-1).numpy()
                         elif metric_name == "seq_reward":
                             new_batch.non_tensor_batch["seq_reward"] = new_batch.batch["token_level_scores"].sum(dim=-1).numpy()
-
                         # Collect the sequence reward for each trajectory
                         prompt_uid2metric_vals = defaultdict(list)
                         for uid, metric_val in zip(new_batch.non_tensor_batch["uid"], new_batch.non_tensor_batch[metric_name]):
@@ -215,6 +214,17 @@ class RayDAPOTrainer(RayPPOTrainer):
                                 print(f"{num_gen_batches=}. Keep generating...")
                                 progress_bar.update(1)
                                 continue
+                            elif max_num_gen_batches > 0 and num_gen_batches >= max_num_gen_batches:
+                                traj_bsz = self.config.data.train_batch_size * self.config.actor_rollout_ref.rollout.n
+                                cur_bsz = len(batch)
+                                if cur_bsz < traj_bsz:
+                                    missing = traj_bsz - cur_bsz
+                                    idx_tensor = torch.randint(0, cur_bsz, (missing,), device="cpu")
+                                    idx_list = idx_tensor.tolist()
+                                    pad_proto = batch[idx_list]
+                                    batch = DataProto.concat([batch, pad_proto])
+                                batch = batch[:traj_bsz]
+                                print(f"{num_gen_batches=}. Sample from existing data...")
                             else:
                                 raise ValueError(f"{num_gen_batches=} >= {max_num_gen_batches=}." + " Generated too many. Please check if your data are too difficult." + " You could also try set max_num_gen_batches=0 to enable endless trials.")
                         else:

@@ -1,0 +1,51 @@
+set -x
+ENGINE=${1:-vllm}
+# If you are using vllm<=0.6.3, you might need to set the following environment variable to avoid bugs:
+# export VLLM_ATTENTION_BACKEND=XFORMERS
+export WANDB_INIT_TIMEOUT=120
+export http_proxy=http://oversea-squid1.jp.txyun:11080 https_proxy=http://oversea-squid1.jp.txyun:11080 no_proxy=localhost,127.0.0.1,localaddress,localdomain.com,internal,corp.kuaishou.com,test.gifshow.com,staging.kuaishou.com
+export HYDRA_FULL_ERROR=1
+export VLLM_ATTENTION_BACKEND=XFORMERS
+wandb login f3b76ea66a38b2a211dc706fa95b02c761994b73
+python3 -m verl.trainer.main_ppo \
+    algorithm.adv_estimator=grpo \
+    data.train_files=/llm_reco/dehua/data/foodx251/train.parquet \
+    data.val_files=/llm_reco/dehua/data/sample_1000/foodx251/test.parquet \
+    data.train_batch_size=64 \
+    data.max_prompt_length=1024 \
+    data.max_response_length=128 \
+    data.filter_overlong_prompts=True \
+    data.truncation='error' \
+    data.image_key=images \
+    actor_rollout_ref.model.path=/mmu_mllm_hdd_2/madehua/model/CKPT/food_model/Qwen2.5-VL-all_cold_sft_nosample \
+    actor_rollout_ref.actor.optim.lr=5e-7 \
+    actor_rollout_ref.model.use_remove_padding=True \
+    actor_rollout_ref.actor.ppo_mini_batch_size=32 \
+    actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=4 \
+    actor_rollout_ref.actor.use_kl_loss=True \
+    actor_rollout_ref.actor.kl_loss_coef=0.01 \
+    actor_rollout_ref.actor.kl_loss_type=low_var_kl \
+    actor_rollout_ref.actor.entropy_coeff=0 \
+    actor_rollout_ref.model.enable_gradient_checkpointing=True \
+    actor_rollout_ref.actor.fsdp_config.param_offload=False \
+    actor_rollout_ref.actor.fsdp_config.optimizer_offload=False \
+    actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=1 \
+    actor_rollout_ref.rollout.tensor_model_parallel_size=2 \
+    actor_rollout_ref.rollout.name=$ENGINE \
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
+    actor_rollout_ref.rollout.enable_chunked_prefill=False \
+    actor_rollout_ref.rollout.enforce_eager=False \
+    actor_rollout_ref.rollout.free_cache_engine=False \
+    actor_rollout_ref.rollout.n=8 \
+    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=4 \
+    actor_rollout_ref.ref.fsdp_config.param_offload=True \
+    algorithm.use_kl_in_reward=False \
+    trainer.critic_warmup=0 \
+    trainer.logger=['console','wandb'] \
+    trainer.project_name='verl_grpo_example_foodx251' \
+    trainer.experiment_name='qwen2_5_vl_7b_function_rm' \
+    trainer.n_gpus_per_node=8 \
+    trainer.nnodes=1 \
+    trainer.save_freq=500 \
+    trainer.test_freq=500 \
+    trainer.total_epochs=1 $@

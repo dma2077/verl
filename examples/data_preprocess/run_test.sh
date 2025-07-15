@@ -2,7 +2,8 @@
 
 # Array of dataset names
 datasets=("food101" "food172" "foodx251" "veg200" "fru92")
-dataset_output_root=/llm_reco/dehua/data
+# datasets=("food172")
+dataset_output_root=/llm_reco/dehua/data/sample_1024/
 # Loop through each dataset
 for dataset in "${datasets[@]}"; do
     echo "Processing dataset: $dataset"

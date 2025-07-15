@@ -68,8 +68,7 @@ def process_item(args):
             r"You FIRST think about the reasoning process as an internal monologue and then provide the final answer. "
             r"The reasoning process MUST BE enclosed within <think> </think> tags. The final answer MUST BE put in \\boxed{}."
         )
-        prompt = "<image>What is the dish?"
-
+        prompt = "<image>Please analyze these food attributes in the image: shape, texture, composition, color, and cooking style. Then identify the food category."
         # Create the message structure
         messages = [
             {

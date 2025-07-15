@@ -28,6 +28,14 @@ from PIL import Image
 from verl.utils.hdfs_io import copy, makedirs
 
 
+food172_category_file = "/llm_reco/dehua/data/food_data/VireoFood172/SplitAndIngreLabel/FoodList.txt"
+
+with open(food172_category_file, 'r', encoding='utf-8') as file:
+    category_dict = {}
+    for idx, line in enumerate(file.readlines()):
+        line = line.strip()
+        category_dict[idx+1] = line
+
 def convert_image_to_bytes_format(image_path):
     with Image.open(image_path) as img:
         img = img.convert('RGB')
@@ -65,12 +73,13 @@ def process_item(args):
 
         # derive category from image path
         category = os.path.basename(os.path.dirname(image_path)).replace('_', ' ')
-
+        if "food172" in dataset_name:
+            category = category_dict[int(category)]
         instruction_following = (
             r"You FIRST think about the reasoning process as an internal monologue and then provide the final answer. "
             r"The reasoning process MUST BE enclosed within <think> </think> tags. The final answer MUST BE put in \\boxed{}."
         )
-        prompt = "<image>What is the dish?"
+        prompt = "<image>Please analyze these food attributes in the image: shape, texture, composition, color, and cooking style. Then identify the food category."
 
         # Create the message structure
         message = {
@@ -151,7 +160,7 @@ def main():
         for line in f:
             raw_data.append(json.loads(line))
 
-    # raw_data = raw_data[:1000]
+    raw_data = raw_data[:1024]
 
     total_items = len(raw_data)
     num_proc = min(args.num_proc, multiprocessing.cpu_count())

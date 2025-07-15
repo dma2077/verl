@@ -1,0 +1,2 @@
+bash /llm_reco/dehua/code/verl/examples/grpo_trainer/food/run_qwen2_5_vl-7b_food172.sh > /llm_reco/dehua/code/verl/examples/grpo_trainer/food/food172.log 2>&1
+nohup bash /llm_reco/dehua/code/verl/examples/grpo_trainer/food/run_qwen2_5_vl-7b_foodx251.sh > /llm_reco/dehua/code/verl/examples/grpo_trainer/food/foodx251.log 2>&1 &

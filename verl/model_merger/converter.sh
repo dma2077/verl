@@ -1,0 +1,1 @@
+python verl/model_merger/converter.py "/mmu_mllm_hdd_2/madehua/model/CKPT/verl/DAPO/food172_nofreeze_3e_7_r54"

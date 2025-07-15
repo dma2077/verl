@@ -38,7 +38,7 @@ https://verl.readthedocs.io/en/latest/advance/checkpoint.html#convert-fsdp-and-m
 
 from .base_model_merger import generate_config_from_args, parse_args
 from .fsdp_model_merger import FSDPModelMerger
-from .megatron_model_merger import MegatronModelMerger
+# from .megatron_model_merger import MegatronModelMerger
 
 
 def main():

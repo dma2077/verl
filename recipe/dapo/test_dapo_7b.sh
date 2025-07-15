@@ -25,22 +25,25 @@ loss_agg_mode="token-mean"
 enable_filter_groups=True
 filter_groups_metric=acc
 max_num_gen_batches=10
-train_prompt_bsz=128
+train_prompt_bsz=32
 gen_prompt_bsz=$((train_prompt_bsz * 3))
-train_prompt_mini_bsz=32
+train_prompt_mini_bsz=8
 n_resp_per_prompt=8
 
-# Ray
-RAY_ADDRESS=${RAY_ADDRESS:-"http://localhost:8265"}
-WORKING_DIR=${WORKING_DIR:-"${PWD}"}
-RUNTIME_ENV=${RUNTIME_ENV:-"${WORKING_DIR}/verl/trainer/runtime_env.yaml"}
 NNODES=${NNODES:-1}
 # Paths
 RAY_DATA_HOME=${RAY_DATA_HOME:-"/llm_reco/dehua/code/verl"}
-MODEL_PATH=${MODEL_PATH:-"/llm_reco/dehua/model/Qwen2.5-7B-Instruct"}
+MODEL_PATH=${MODEL_PATH:-"/llm_reco/dehua/model/Qwen2.5-VL-7B-Instruct"}
 CKPTS_DIR=${CKPTS_DIR:-"${RAY_DATA_HOME}/ckpts/${project_name}/${exp_name}"}
-TRAIN_FILE=${TRAIN_FILE:-"${RAY_DATA_HOME}/data/dapo-math-17k.parquet"}
-TEST_FILE=${TEST_FILE:-"${RAY_DATA_HOME}/data/aime-2024.parquet"}
+# TRAIN_FILE=${TRAIN_FILE:-"/llm_reco/dehua/code/verl/data/dapo-math-17k.parquet"}
+# TEST_FILE=${TEST_FILE:-"/llm_reco/dehua/code/verl/data/aime-2024.parquet"}
+TRAIN_FILE=${TRAIN_FILE:-"/llm_reco/dehua/data/food101/train.parquet"}
+TEST_FILE=${TEST_FILE:-"/llm_reco/dehua/data/sample_1000/food101/test.parquet"}
+# TRAIN_FILE=${TRAIN_FILE:-"/llm_reco/dehua/data/geometry3k/train.parquet"}
+# TEST_FILE=${TEST_FILE:-"/llm_reco/dehua/data/geometry3k/test.parquet"}
+# TRAIN_FILE=${TRAIN_FILE:-"/llm_reco/dehua/data/gsm8k/train.parquet"}
+# TEST_FILE=${TEST_FILE:-"/llm_reco/dehua/data/gsm8k/test.parquet"}
+
 
 # Algorithm
 temperature=1.0
@@ -52,15 +55,10 @@ use_dynamic_bsz=True
 infer_micro_batch_size=null
 train_micro_batch_size=null
 offload=False
-<<<<<<< HEAD
-wandb login f3b76ea66a38b2a211dc706fa95b02c761994b73
-python3 -m recipe.dapo.src.main_dapo \
-=======
+export http_proxy=http://oversea-squid1.jp.txyun:11080 https_proxy=http://oversea-squid1.jp.txyun:11080 no_proxy=localhost,127.0.0.1,localaddress,localdomain.com,internal,corp.kuaishou.com,test.gifshow.com,staging.kuaishou.com
 
-ray job submit --no-wait --runtime-env="${RUNTIME_ENV}" \
-    --working-dir "${WORKING_DIR}" \
-    -- python3 -m recipe.dapo.main_dapo \
->>>>>>> 3b3e597042423ecb9c2a26567f8dd1c683f7018c
+wandb login f3b76ea66a38b2a211dc706fa95b02c761994b73
+python3 -m recipe.dapo.main_dapo \
     data.train_files="${TRAIN_FILE}" \
     data.val_files="${TEST_FILE}" \
     data.prompt_key=prompt \

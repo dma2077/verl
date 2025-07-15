@@ -4,7 +4,7 @@ export HOME=/llm_reco/dehua/code
 export VERL_HOME=${VERL_HOME:-"${HOME}/verl"}
 export TRAIN_FILE=${TRAIN_FILE:-"${VERL_HOME}/data/dapo-math-17k.parquet"}
 export TEST_FILE=${TEST_FILE:-"${VERL_HOME}/data/aime-2024.parquet"}
-export OVERWRITE=${OVERWRITE:-0}
+export OVERWRITE=${OVERWRITE:-1}
 
 mkdir -p "${VERL_HOME}/data"
 

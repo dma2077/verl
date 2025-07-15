@@ -2,9 +2,10 @@ set -x
 ENGINE=${1:-vllm}
 export CUDA_DEVICE_MAX_CONNECTIONS=1 # For megatron communication/computation overlapping
 
-HF_MODEL_PATH=Qwen/Qwen2.5-VL-7B-Instruct
+HF_MODEL_PATH=/llm_reco/dehua/model/Qwen2.5-VL-7B-Instruct
 DIST_CKPT_PATH=${DIST_CKPT_PATH}
-
+train_path=/llm_reco/dehua/data/geometry3k/train.parquet
+test_path=/llm_reco/dehua/data/geometry3k/test.parquet
 # convert HF model to meagatron format offlinely
 # python scripts/converter_hf_to_mcore.py --hf_model_path $HF_MODEL_PATH --output_path $DIST_CKPT_PATH
 
@@ -29,9 +30,6 @@ ACTOR_GRAD_OFFLOAD=${ACTOR_GRAD_OFFLOAD:-$COMMON_GRAD_OFFLOAD}
 ACTOR_OPTIMIZER_OFFLOAD=${ACTOR_OPTIMIZER_OFFLOAD:-$COMMON_OPTIMIZER_OFFLOAD}
 REF_PARAM_OFFLOAD=${REF_PARAM_OFFLOAD:-$COMMON_PARAM_OFFLOAD}
 
-
-train_path=$HOME/data/geo3k/train.parquet
-test_path=$HOME/data/geo3k/test.parquet
 
 python3 -m verl.trainer.main_ppo --config-path=config \
     --config-name='ppo_megatron_trainer.yaml'\
