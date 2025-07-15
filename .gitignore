@@ -125,3 +125,5 @@ log
 outputs
 .history
 wandb/*
+verl/inference/question/*
+verl/inference/answer/*
