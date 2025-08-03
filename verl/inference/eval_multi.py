@@ -17,7 +17,7 @@ def find_and_sort_models(base_dir: Path):
     """
     # 查找所有符合 .../global_step_*/food* 格式的目录
     # 使用 glob 可以轻松匹配这种模式
-    model_paths = list(base_dir.glob("global_step_*/food*"))
+    model_paths = list(base_dir.glob("global_step_*/**"))
 
     if not model_paths:
         print(f"错误：在目录 '{base_dir}' 中没有找到任何匹配 'global_step_*/food*' 格式的子目录。")

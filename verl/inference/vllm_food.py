@@ -102,6 +102,57 @@ def get_prompts(filename):
         category_list.append(data["category"])
     return messages, image_path_list, category_list
 
+
+def get_prompts_with_category(filename, categories):
+    """
+    Load test data from a JSONL file and generate prompts that include the list of possible categories.
+
+    Args:
+        filename (str): Path to the JSONL file containing test samples.
+        categories (List[str]): List of all possible food categories in the dataset.
+
+    Returns:
+        messages (List[List[Dict]]): Conversations with embedded images and category-aware prompts.
+        image_path_list (List[str]): Original image paths from the data entries.
+        category_list (List[str]): Ground-truth categories for each sample.
+    """
+    test_data = load_jsonl(filename)
+    messages = []
+    image_path_list = []
+    category_list = []
+
+    # Combine categories and instruct to reply with category only
+    categories_str = ", ".join(categories)
+    base_prompt = (
+        "Please identify the food category from the following options: "
+        f"{categories_str}. Please reply with only the category name, no additional text."
+    )
+
+    for idx, data in tqdm(enumerate(test_data), total=len(test_data), desc="Loading test data"):
+        image_path = (
+            data["image"]
+            .replace(
+                "/map-vepfs/dehua/data/data", "/llm_rehua/data/food_data"
+            )
+            .replace("vegfru-dataset/", "")
+        )
+        base64_image = image_to_base64(image_path)
+        conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}},
+                    {"type": "text", "text": base_prompt},
+                ],
+            }
+        ]
+        messages.append(conversation)
+        image_path_list.append(data["image"])
+        category_list.append(data["category"])
+
+    return messages, image_path_list, category_list
+
+
 def get_model(model_path, max_model_len=4096):
     import re
     def extract_number(text):
@@ -111,9 +162,9 @@ def get_model(model_path, max_model_len=4096):
     if model_size:
         if model_size <= 10:
             tensor_parallel_size = 1
-        elif model_size > 10 and model_size < 30:
+        elif model_size < 30:
             tensor_parallel_size = 2
-        elif model_size >=30:
+        else:
             tensor_parallel_size = 4
     else:
         tensor_parallel_size = 1
@@ -132,17 +183,23 @@ def main(args):
     for arg in vars(args):
         print(f"{arg}: {getattr(args, arg)}")
 
-    # Construct absolute paths using ROOT_DIR
     root_dir = os.environ.get('ROOT_DIR', '')
     save_filename = os.path.join(root_dir, args.save_filename)
     question_file = os.path.join(root_dir, args.question_file)
-    
-    model = get_model(args.model_path)
-    messages, image_path_list, category_list = get_prompts(filename=question_file)
-    outputs = model.generate_until(messages)
+
     id2category_function = get_id2category(save_filename)
     id2cat = id2category_function()
     all_categories = list(id2cat.values())
+
+    # Choose whether to include category list in prompts
+    if args.with_category:
+        messages, image_path_list, category_list = get_prompts_with_category(question_file, all_categories)
+    else:
+        messages, image_path_list, category_list = get_prompts(filename=question_file)
+
+    model = get_model(args.model_path)
+    outputs = model.generate_until(messages)
+
     # Save the results
     formmatted_datas = []
     for idx, o in enumerate(outputs):
@@ -156,13 +213,15 @@ def main(args):
         formmatted_datas.append(formmatted_data)
     save_jsonl(save_filename, formmatted_datas)
     formmatted_datas = load_jsonl(save_filename)
+
     truth = 0
     for idx, o in enumerate(formmatted_datas):
         generated_text = o["text"]
         m = re.search(r"<answer>(.*?)</answer>", generated_text, re.DOTALL)
         if not m:
-            continue
-        pred = m.group(1).strip().lower()
+            pred =generated_text
+        else:
+            pred = m.group(1).strip().lower()
         if pred == category_list[idx].lower():
             truth += 1
         else:
@@ -172,16 +231,19 @@ def main(args):
     total_samples = len(formmatted_datas)
     accuracy = (truth / total_samples) if total_samples > 0 else 0.0
     summary_data = {
-            "final_summary": True,
-            "accuracy": f"{accuracy:.4f}",
-            "correct_count": truth,
-            "total_count": total_samples
-        }
+        "final_summary": True,
+        "accuracy": f"{accuracy:.4f}",
+        "correct_count": truth,
+        "total_count": total_samples
+    }
     add_jsonl(save_filename, summary_data)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run VLM inference with specified parameters.")
     parser.add_argument('--model_path', type=str, required=True, help='Path to the model checkpoint.')
     parser.add_argument('--save_filename', type=str, required=True, help='Filename to save the results.')
     parser.add_argument('--question_file', type=str, required=True, help='Path to the question file.')
+    parser.add_argument('--with_category', action='store_true', help='If set, use get_prompts_with_category to include category list in prompts.')
+
     args = parser.parse_args()
     main(args)

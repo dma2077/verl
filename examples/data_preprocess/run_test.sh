@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # Array of dataset names
-datasets=("food101" "food172" "foodx251" "veg200" "fru92")
+# datasets=("food101" "food172" "foodx251" "veg200" "fru92")
+datasets=("food2k")
 # datasets=("food172")
 dataset_output_root=/llm_reco/dehua/data/sample_1024/
 # Loop through each dataset

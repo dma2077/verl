@@ -4,7 +4,7 @@
 datasets=("food101" "food172" "foodx251" "veg200" "fru92" "food2k")
 
 for dataset in "${datasets[@]}"; do
-    INPUT_JSON="/llm_reco/dehua/data/food_finetune_data/${dataset}_cold_sft_8shot.json"
+    INPUT_JSON="/llm_reco/dehua/data/food_finetune_data/converted/${dataset}_cold_sft_8shot.json"
     OUTPUT_DIR="/llm_reco/dehua/data/8_shot/${dataset}"
 
     echo "Processing dataset: $dataset"
